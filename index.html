@@ -1,0 +1,281 @@
+
+  area.appendChild(button);
+ });
+}
+
+function answerQuestion(index){
+
+ const buttons=document.querySelectorAll('.answer');
+ buttons.forEach(b=>b.disabled=true);
+
+ if(index===currentQuestion.c){
+
+  score+=30;
+  streak++;
+  solved++;
+
+  if(streak>=2 && difficulty<3){
+   difficulty++;
+   streak=0;
+  }
+
+  document.getElementById('feedback').textContent=
+   'آفرین! پاسخ درست است. +۳۰ امتیاز';
+
+ }else{
+
+  streak=0;
+
+  if(difficulty>1) difficulty--;
+
+  document.getElementById('feedback').textContent=
+   'پاسخ درست: '+currentQuestion.a[currentQuestion.c];
+
+ }
+
+ updateScore();
+ updateMission();
+
+ document.getElementById('quizContinue').classList.remove('hidden');
+}
+
+document.getElementById('quizContinue').onclick=()=>{
+
+ quizActive=false;
+
+ if(solved>=3){
+
+  hideCard();
+  toast('دروازه دانش فعال شد!');
+
+ }else{
+
+  hideCard();
+  toast('به سراغ چالش بعدی برو!');
+ }
+
+}
+
+// -------------------------------
+// تعامل با راهنما و دروازه
+// -------------------------------
+
+function interact(){
+
+ if(!started || quizActive || completed)return;
+
+ const distance=player.position.distanceTo(guide.position);
+
+ if(distance<2.5){
+
+  if(collected<3){
+
+   showCard('dialog');
+
+   document.getElementById('dialogTitle').textContent='راهنمای نیروگاه';
+
+   document.getElementById('dialogText').textContent=
+   'سلام آریا! من نگهبان این سرزمین هستم. سه کریستال انرژی را پیدا کن تا بتوانیم دروازه دانش را فعال کنیم.';
+
+  }else{
+
+   showCard('dialog');
+
+   document.getElementById('dialogTitle').textContent='راهنمای نیروگاه';
+
+   document.getElementById('dialogText').textContent=
+   'آفرین آریا! حالا باید سه چالش ریاضی را حل کنی تا دروازه باز شود.';
+
+  }
+
+  return;
+ }
+
+ const portalDistance=player.position.distanceTo(portal.position);
+
+ if(portalDistance<3){
+
+  if(collected<3){
+
+   toast('ابتدا سه کریستال انرژی را پیدا کن!');
+   return;
+
+  }
+
+  if(solved<3){
+
+   openQuiz();
+   return;
+
+  }
+
+  finishLevel();
+  return;
+
+ }
+
+ toast('چیزی برای تعامل در این نزدیکی نیست.');
+}
+
+document.getElementById('interact').onclick=interact;
+
+document.getElementById('dialogButton').onclick=()=>{
+
+ hideCard();
+
+ if(collected>=3 && solved<3){
+  openQuiz();
+ }
+
+};
+
+// -------------------------------
+// پایان مرحله
+// -------------------------------
+
+function finishLevel(){
+
+ completed=true;
+
+ localStorage.setItem('matrysa_level1','completed');
+ localStorage.setItem('matrysa_score',score);
+
+ document.getElementById('endScore').textContent=
+ 'امتیاز نهایی: '+score;
+
+ showCard('ending');
+
+ document.getElementById('missionText').textContent=
+ 'اولین قطعه قلب دانش پیدا شد!';
+
+}
+
+document.getElementById('restart').onclick=()=>{
+
+ location.reload();
+
+};
+
+// -------------------------------
+// دوربین دنبال‌کننده
+// -------------------------------
+
+const direction=new THREE.Vector3();
+
+function updateCamera(){
+
+ const target=new THREE.Vector3(
+  player.position.x,
+  player.position.y+2,
+  player.position.z+6
+ );
+
+ camera.position.lerp(target,.09);
+
+ const lookAt=new THREE.Vector3(
+  player.position.x,
+  player.position.y+1,
+  player.position.z-2
+ );
+
+ camera.lookAt(lookAt);
+
+}
+
+// -------------------------------
+// حلقه اصلی بازی
+// -------------------------------
+
+const clock=new THREE.Clock();
+
+function animate(){
+
+ requestAnimationFrame(animate);
+
+ const delta=Math.min(clock.getDelta(),.05);
+ const speed=5*delta;
+
+ if(started && !quizActive && !completed && overlay.classList.contains('hidden')){
+
+  let dx=0;
+  let dz=0;
+
+  if(keys['w'] || keys['arrowup']) dz-=1;
+  if(keys['s'] || keys['arrowdown']) dz+=1;
+  if(keys['a'] || keys['arrowleft']) dx-=1;
+  if(keys['d'] || keys['arrowright']) dx+=1;
+
+  const moving=dx!==0 || dz!==0;
+
+  if(moving){
+
+   const length=Math.hypot(dx,dz);
+
+   dx/=length;
+   dz/=length;
+
+   player.position.x+=dx*speed;
+   player.position.z+=dz*speed;
+
+   player.rotation.y=Math.atan2(dx,dz);
+
+   body.position.y=1.05+Math.sin(Date.now()*.012)*.07;
+
+  }
+
+  // محدودیت محیط
+
+  player.position.x=Math.max(-10,Math.min(10,player.position.x));
+  player.position.z=Math.max(-15,Math.min(10,player.position.z));
+
+  // حرکت و جمع‌آوری کریستال‌ها
+
+  checkCrystals();
+
+  // چرخش دروازه
+
+  ring.rotation.z+=delta*.5;
+  ring.rotation.y+=delta*.3;
+
+  // حرکت شخصیت راهنما
+
+  guide.rotation.y=Math.sin(Date.now()*.001)*.15;
+
+  updateCamera();
+
+ }
+
+ renderer.render(scene,camera);
+
+}
+
+animate();
+
+// -------------------------------
+// تغییر اندازه صفحه
+// -------------------------------
+
+window.addEventListener('resize',()=>{
+
+ camera.aspect=window.innerWidth/window.innerHeight;
+ camera.updateProjectionMatrix();
+
+ renderer.setSize(window.innerWidth,window.innerHeight);
+ renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+
+});
+
+// -------------------------------
+// بازیابی اطلاعات
+// -------------------------------
+
+updateScore();
+
+if(localStorage.getItem('matrysa_level1')==='completed'){
+ document.getElementById('start').textContent=
+ 'شروع دوباره ماجراجویی';
+}
+
+</script>
+</body>
+</html>
